@@ -30,7 +30,8 @@ public class CCC : MonoBehaviour
 	int _jumpCounter = 0;
 	Vector3 _lastCheckpoint = Vector3.zero;
 
-	public bool Pause = false;
+	bool _pause = false;
+	Vector3 _pausedVelocity = Vector3.zero;
 
 	// Use this for initialization
 	void Start()
@@ -49,7 +50,7 @@ public class CCC : MonoBehaviour
 	void Update()
 	{
 		//Seulement si le jeu n'est pas en pause
-		if (!Pause) {
+		if (!_pause) {
 			
 			//Checking Air/Ground State--------------------------
 			if (!_isGrounded) {
@@ -91,8 +92,15 @@ public class CCC : MonoBehaviour
 			_cam.localEulerAngles = rot;
 
 			//MOVEMENT-----------------------------------------------
-			_speed = transform.forward * player.GetAxisRaw ("Move Vertical") + transform.right * player.GetAxisRaw ("Move Horizontal");
-			_speed.Normalize ();
+			if (_isGrounded) {
+				_speed = transform.forward + transform.right * player.GetAxisRaw ("Move Horizontal");
+				_speed.Normalize ();
+				_speed *= RunSpeed;
+			}
+			else {
+				_speed = transform.forward * player.GetAxisRaw ("Move Vertical") + transform.right * player.GetAxisRaw ("Move Horizontal");
+				_speed.Normalize ();
+			}
 
 			//JUMP--------------------------------------------------
 			if (player.GetButton ("Jump") && _canJump)
@@ -112,7 +120,7 @@ public class CCC : MonoBehaviour
 	void FixedUpdate()
 	{
 		//Seulement si le jeu n'est pas en pause
-		if (!Pause) {
+		if (!_pause) {
 
 			//ROTATION-----------------------------
 			var rot = _body.rotation.eulerAngles;
@@ -138,7 +146,7 @@ public class CCC : MonoBehaviour
 			}
 			//AirControl
 			else {
-				_speed *= 0.05f;
+				_speed *= 0.25f;
 				if (Vector2.Angle (new Vector2 (velocity.x, velocity.z), new Vector2 (_speed.x, _speed.z)) <= 90) {
 					float _proj = ((velocity.x * _speed.x) + (velocity.z * _speed.z)) / ((_speed.x * _speed.x) + (_speed.z * _speed.z));
 					_proj *= new Vector2 (_speed.x, _speed.z).magnitude;
@@ -155,6 +163,18 @@ public class CCC : MonoBehaviour
 			_jumpCounter--;
 
 			_body.AddForce(Vector3.down * Gravity, ForceMode.Acceleration);
+		}
+	}
+
+	public void Pause () {
+		if (_pause) {
+			_pause = false;
+			_body.velocity = _pausedVelocity;
+		}
+		else {
+			_pause = true;
+			_pausedVelocity = _body.velocity;
+			_body.velocity = Vector3.zero;
 		}
 	}
 
