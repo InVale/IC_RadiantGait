@@ -7,7 +7,8 @@ using Rewired;
 public class CCC : MonoBehaviour
 {
 	public float CameraSpeed = 1f;
-	public float RunSpeed = 5f;
+	public float RunSpeed = 3f;
+	public float AccelerationPerSec = 0.5f;
 	public float JumpForce = 5f;
 	public float Gravity = 19.81f;
 	public float AirControl = 1f;
@@ -18,7 +19,7 @@ public class CCC : MonoBehaviour
 	public float TopAngleLimit = 90f;
 	public LayerMask Ground;
 
-	Player player;
+	Player _player;
 	Transform _cam, _groundCheck;
 	Rigidbody _body;
 
@@ -36,7 +37,7 @@ public class CCC : MonoBehaviour
 	// Use this for initialization
 	void Start()
 	{
-		player = ReInput.players.GetPlayer(0);
+		_player = ReInput.players.GetPlayer(0);
 		_cam = transform.GetChild(0);
 		_groundCheck = transform.GetChild(1);
 		_body = GetComponent<Rigidbody>();
@@ -74,8 +75,8 @@ public class CCC : MonoBehaviour
 			float rotx;
 			float roty;
 
-			rotx = player.GetAxis("Look Horizontal") * CameraSpeed;
-			roty = -player.GetAxis("Look Vertical") * CameraSpeed;
+			rotx = _player.GetAxis("Look Horizontal") * CameraSpeed;
+			roty = -_player.GetAxis("Look Vertical") * CameraSpeed;
 
 			//we store the rotation along Y axis
 			//because physics functions have to be called in FixedUpdate
@@ -93,17 +94,18 @@ public class CCC : MonoBehaviour
 
 			//MOVEMENT-----------------------------------------------
 			if (_isGrounded) {
-				_speed = transform.forward + transform.right * player.GetAxisRaw ("Move Horizontal");
+				_speed = transform.forward + transform.right * _player.GetAxisRaw ("Move Horizontal");
 				_speed.Normalize ();
+				RunSpeed += AccelerationPerSec * Time.deltaTime;
 				_speed *= RunSpeed;
 			}
 			else {
-				_speed = transform.forward * player.GetAxisRaw ("Move Vertical") + transform.right * player.GetAxisRaw ("Move Horizontal");
+				_speed = transform.forward * _player.GetAxisRaw ("Move Vertical") + transform.right * _player.GetAxisRaw ("Move Horizontal");
 				_speed.Normalize ();
 			}
 
 			//JUMP--------------------------------------------------
-			if (player.GetButton ("Jump") && _canJump)
+			if (_player.GetButton ("Jump") && _canJump)
 			{
 				_body.AddForce(Vector3.up * JumpForce, ForceMode.VelocityChange);
 				_canJump = false;
