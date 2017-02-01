@@ -9,7 +9,7 @@ public class CCC : MonoBehaviour
 	public float CameraSpeed = 1f;
 	public float RunSpeed = 3f;
 	public float AccelerationPerSec = 0.5f;
-	public float JumpForce = 5f;
+	public float JumpForce = 9f;
 	public float Gravity = 19.81f;
 	public float AirControl = 1f;
 	public float GroundCheckRadius = 0.1f;
@@ -20,7 +20,8 @@ public class CCC : MonoBehaviour
 	public LayerMask Ground;
 
 	Player _player;
-	Transform _cam, _groundCheck;
+	public Transform Cam;
+	public Transform GroundCheck;
 	Rigidbody _body;
 
 	float _yRotation = 0f;
@@ -38,8 +39,6 @@ public class CCC : MonoBehaviour
 	void Start()
 	{
 		_player = ReInput.players.GetPlayer(0);
-		_cam = transform.GetChild(0);
-		_groundCheck = transform.GetChild(1);
 		_body = GetComponent<Rigidbody>();
 
 		Cursor.lockState = CursorLockMode.None;
@@ -55,18 +54,18 @@ public class CCC : MonoBehaviour
 			
 			//Checking Air/Ground State--------------------------
 			if (!_isGrounded) {
-				_isGrounded = Physics.CheckSphere(_groundCheck.position, GroundCheckRadius, Ground);
+				_isGrounded = Physics.CheckSphere(GroundCheck.position, GroundCheckRadius, Ground);
 				if (_isGrounded) {
 					//Landing
 				}
 			}
 			else {
-				_isGrounded = Physics.CheckSphere(_groundCheck.position, GroundCheckRadius, Ground);
+				_isGrounded = Physics.CheckSphere(GroundCheck.position, GroundCheckRadius, Ground);
 			}
 
 			//Setting Jump State
 			if ((_jumpCounter <= 0) && (_body.velocity.y <= 0)) {
-				_canJump = Physics.CheckSphere(_groundCheck.position, GroundCheckRadius, Ground);
+				_canJump = Physics.CheckSphere(GroundCheck.position, GroundCheckRadius, Ground);
 			}
 
 			//ROTATION-------------------------------------------
@@ -75,8 +74,8 @@ public class CCC : MonoBehaviour
 			float rotx;
 			float roty;
 
-			rotx = _player.GetAxis("Look Horizontal") * CameraSpeed;
-			roty = -_player.GetAxis("Look Vertical") * CameraSpeed;
+			rotx = _player.GetAxis("Look Horizontal") * CameraSpeed * 0.1f;
+			roty = -_player.GetAxis("Look Vertical") * CameraSpeed * 0.1f;
 
 			//we store the rotation along Y axis
 			//because physics functions have to be called in FixedUpdate
@@ -88,9 +87,9 @@ public class CCC : MonoBehaviour
 			//note also that the camera has no collider attached to it that could interfere with the rigidbody
 			_xRotation += roty * Time.deltaTime * Mathf.Rad2Deg;
 			_xRotation = Mathf.Clamp(_xRotation, -TopAngleLimit, BottomAngleLimit);
-			var rot = _cam.localEulerAngles;
+			var rot = Cam.localEulerAngles;
 			rot.x = _xRotation;
-			_cam.localEulerAngles = rot;
+			Cam.localEulerAngles = rot;
 
 			//MOVEMENT-----------------------------------------------
 			if (_isGrounded) {
@@ -169,14 +168,17 @@ public class CCC : MonoBehaviour
 	}
 
 	public void Pause () {
-		if (_pause) {
-			_pause = false;
-			_body.velocity = _pausedVelocity;
-		}
-		else {
+		if (!_pause) {
 			_pause = true;
 			_pausedVelocity = _body.velocity;
 			_body.velocity = Vector3.zero;
+		}
+	}
+
+	public void UnPause () {
+		if (_pause) {
+			_pause = false;
+			_body.velocity = _pausedVelocity;
 		}
 	}
 
@@ -191,7 +193,7 @@ public class CCC : MonoBehaviour
 		if (collision.collider.tag == "Platform") 
 		{
 			RaycastHit hit;
-			Collider[] _sphereHit = Physics.OverlapSphere (_groundCheck.position, GroundCheckRadius);
+			Collider[] _sphereHit = Physics.OverlapSphere (GroundCheck.position, GroundCheckRadius);
 
 			if (_sphereHit.Length > 0) 
 			{

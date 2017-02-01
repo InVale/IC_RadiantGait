@@ -12,6 +12,12 @@ public class Interaction : MonoBehaviour {
 	public delegate void OpeningEyes ();
 	public static event OpeningEyes OnOpen;
 
+	public delegate void Pausing ();
+	public static event Pausing OnPause;
+
+	public delegate void Unpausing ();
+	public static event Unpausing OnUnpause;
+
 	Player _player;
 	CCC _ccc;
 
@@ -27,8 +33,18 @@ public class Interaction : MonoBehaviour {
 	void Update () {
 
 		if (_player.GetButtonDown ("Pause")) {
-			_pause = _pause ? false : true;
-			_ccc.Pause ();
+			if (_pause) {
+				_pause = false;
+				_ccc.UnPause();
+				if (OnUnpause != null)
+					OnUnpause ();
+			}
+			else {
+				_pause = true;
+				_ccc.Pause();
+				if (OnPause != null)
+					OnPause ();
+			}
 		}
 
 		if (!_pause) {
