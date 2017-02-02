@@ -6,6 +6,7 @@ using Rewired;
 
 public class CCC : MonoBehaviour
 {
+	public bool IsMoving = true;
 	public float CameraSpeed = 1f;
 	public float RunSpeed = 3f;
 	public float AccelerationPerSec = 0.5f;
@@ -27,7 +28,7 @@ public class CCC : MonoBehaviour
 	float _yRotation = 0f;
 	float _xRotation = 0f;
 	Vector3 _speed;
-	bool _isGrounded = false;
+	public bool _isGrounded = false;
 	bool _canJump = true;
 	int _jumpCounter = 0;
 	Vector3 _lastCheckpoint = Vector3.zero;
@@ -140,30 +141,35 @@ public class CCC : MonoBehaviour
 			//MOUVEMENT-----------------------------
 			var velocity = _body.velocity;
 			//Deplacement au sol
-			if (_isGrounded) {
-				Vector3 velocityChange = (_speed - velocity);
-				velocityChange.y = 0;
-				_body.AddForce(velocityChange, ForceMode.VelocityChange);
-			}
-			//AirControl
-			else {
-				_speed *= 0.25f;
-				if (Vector2.Angle (new Vector2 (velocity.x, velocity.z), new Vector2 (_speed.x, _speed.z)) <= 90) {
-					float _proj = ((velocity.x * _speed.x) + (velocity.z * _speed.z)) / ((_speed.x * _speed.x) + (_speed.z * _speed.z));
-					_proj *= new Vector2 (_speed.x, _speed.z).magnitude;
-					if (_proj < AirControl) {
-							_body.velocity += _speed;
-					}
+			if (IsMoving) {
+				if (_isGrounded) {
+					Vector3 velocityChange = (_speed - velocity);
+					velocityChange.y = 0;
+					_body.AddForce(velocityChange, ForceMode.VelocityChange);
 				}
+				//AirControl
 				else {
-					_body.velocity += _speed;
+					_speed *= 0.25f;
+					if (Vector2.Angle (new Vector2 (velocity.x, velocity.z), new Vector2 (_speed.x, _speed.z)) <= 90) {
+						float _proj = ((velocity.x * _speed.x) + (velocity.z * _speed.z)) / ((_speed.x * _speed.x) + (_speed.z * _speed.z));
+						_proj *= new Vector2 (_speed.x, _speed.z).magnitude;
+						if (_proj < AirControl) {
+							_body.velocity += _speed;
+						}
+					}
+					else {
+						_body.velocity += _speed;
+					}
 				}
 			}
 
 			//JUMP & GRAVITY-----------------------------------------------
 			_jumpCounter--;
 
-			_body.AddForce(Vector3.down * Gravity, ForceMode.Acceleration);
+			if (IsMoving) {
+				_body.AddForce(Vector3.down * Gravity, ForceMode.Acceleration);
+			}
+
 		}
 	}
 

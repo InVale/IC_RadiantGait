@@ -18,6 +18,8 @@ public class Interaction : MonoBehaviour {
 	public delegate void Unpausing ();
 	public static event Unpausing OnUnpause;
 
+	public bool EyesClosed = false;
+
 	Player _player;
 	CCC _ccc;
 
@@ -27,6 +29,7 @@ public class Interaction : MonoBehaviour {
 	void Start () {
 		_ccc = gameObject.GetComponent <CCC> ();
 		_player = ReInput.players.GetPlayer(0);
+
 	}
 	
 	// Update is called once per frame
@@ -52,8 +55,7 @@ public class Interaction : MonoBehaviour {
 			if (_player.GetButtonUp ("Close Eye")) {
 				if (OnOpen != null)
 					OnOpen ();
-			}
-			else if (_player.GetButtonDown ("Close Eye")) {
+			} else if ((_player.GetButtonDown ("Close Eye")) && (!EyesClosed)) {
 				if (OnClose != null)
 					OnClose ();
 			}
