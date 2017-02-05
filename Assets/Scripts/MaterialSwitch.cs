@@ -16,10 +16,10 @@ public class MaterialSwitch : MonoBehaviour {
 		
     public void LitUp ()
     {
-		gameObject.GetComponent<MeshRenderer>().material = Unlit;
+		gameObject.GetComponent<MeshRenderer>().material = _lit;
     }
 
 	public void LitOff () {
-    	gameObject.GetComponent<MeshRenderer>().material = _lit;
+    	gameObject.GetComponent<MeshRenderer>().material = Unlit;
     }
 }

@@ -53,9 +53,11 @@ public class Interaction : MonoBehaviour {
 		if (!_pause) {
 
 			if (_player.GetButtonUp ("Close Eye")) {
+				EyesClosed = false;
 				if (OnOpen != null)
 					OnOpen ();
 			} else if ((_player.GetButtonDown ("Close Eye")) && (!EyesClosed)) {
+				EyesClosed = true;
 				if (OnClose != null)
 					OnClose ();
 			}
