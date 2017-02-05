@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 using Rewired;
+using DG.Tweening;
 
 public class CCC : MonoBehaviour
 {
@@ -19,6 +20,7 @@ public class CCC : MonoBehaviour
 	public float Gravity = 19.81f;
 	public float AirControlLimit = 1f;
 	public float AirControlPower = 0.25f;
+	public float RotationSpeed = 0.5f;
 	public float GroundCheckRadius = 0.1f;
 	[Range(0f, 90f)]
 	public float BottomAngleLimit = 70f;
@@ -27,19 +29,20 @@ public class CCC : MonoBehaviour
 	public LayerMask Ground;
 
 	Player _player;
+	public Transform PlayerRot;
 	public Transform Cam;
 	public Transform GroundCheck;
 	Rigidbody _body;
 
-	Vector3 _front;
-	Vector3 _gravity;
+	Vector3 instantRotation;
+	Vector3 velocity2D = Vector3.zero;
+	float velocityGravity = 0;
 
 	float _yRotation = 0f;
 	float _xRotation = 0f;
 	Vector3 _speed;
 	public bool _isGrounded = false;
 	bool _canJump = true;
-	int _jumpCounter = 0;
 	Vector3 _lastCheckpoint = Vector3.zero;
 
 	bool _pause = false;
@@ -55,9 +58,8 @@ public class CCC : MonoBehaviour
 		Cursor.lockState = CursorLockMode.Locked;
 		_yRotation = _body.rotation.eulerAngles.y;
 
-		_front = transform.forward;
-		_gravity = -transform.up;
 		CurrentSpeed = InitialSpeed;
+		instantRotation = transform.eulerAngles;
 	}
 
 	// Update is called once per frame
@@ -68,32 +70,25 @@ public class CCC : MonoBehaviour
 
 			//Handling Direction---------------------------------
 			RaycastHit hit;
-			if (Physics.Raycast(transform.position, Vector3.down, out hit, 20, Ground)) {
-				_front = hit.transform.forward;
-				_gravity = -hit.transform.up;
-				Vector3 newRot = hit.transform.rotation.eulerAngles;
-				Vector3 camRot = Cam.transform.rotation.eulerAngles;
+			if (Physics.Raycast(transform.position, -transform.up, out hit, 20, Ground)) {
+				Vector3 newRot = hit.transform.eulerAngles;
 
-				transform.rotation = Quaternion.Euler(newRot);
-				if (CanRotate) {
-					Cam.transform.rotation = Quaternion.Euler(camRot);
-				}
+				transform.DOKill ();
+				transform.DORotate (newRot, RotationSpeed);
 			}
 
-			//Checking Air/Ground State--------------------------
+			//Checking Air/Ground State & GRAVITY---------------
 			if (!_isGrounded) {
 				_isGrounded = Physics.CheckSphere(GroundCheck.position, GroundCheckRadius, Ground);
+				_canJump = false;
+				velocityGravity -= Gravity * Time.deltaTime;
 				if (_isGrounded) {
-					//Landing
+					velocityGravity = -Gravity * 0.1f;
+					_canJump = true;
 				}
 			}
 			else {
 				_isGrounded = Physics.CheckSphere(GroundCheck.position, GroundCheckRadius, Ground);
-			}
-
-			//Setting Jump State
-			if ((_jumpCounter <= 0) && (_body.velocity.y <= 0)) {
-				_canJump = Physics.CheckSphere(GroundCheck.position, GroundCheckRadius, Ground);
 			}
 
 			//ROTATION-------------------------------------------
@@ -110,13 +105,16 @@ public class CCC : MonoBehaviour
 				//because physics functions have to be called in FixedUpdate
 				//but inputs have to be processed in Update
 				_yRotation += rotx * Mathf.Rad2Deg * Time.deltaTime;
+				Vector3 rot = PlayerRot.localEulerAngles;
+				rot.y = _yRotation;
+				PlayerRot.localEulerAngles = rot;
 
 				//since we don't use the rigidbody to rotate the camera along the local X axis
 				//we can directly modify the transform
 				//note also that the camera has no collider attached to it that could interfere with the rigidbody
 				_xRotation += roty * Time.deltaTime * Mathf.Rad2Deg;
 				_xRotation = Mathf.Clamp(_xRotation, -TopAngleLimit, BottomAngleLimit);
-				var rot = Cam.localEulerAngles;
+				rot = Cam.localEulerAngles;
 				rot.x = _xRotation;
 				Cam.localEulerAngles = rot;
 			}
@@ -126,19 +124,19 @@ public class CCC : MonoBehaviour
 
 			if (_isGrounded) {
 
-				Vector3 vertical = transform.forward * _player.GetAxisRaw ("Move Vertical");
-				Vector3 horizontal = transform.right * _player.GetAxisRaw ("Move Horizontal");
+				Vector3 vertical = PlayerRot.localRotation * Vector3.forward * _player.GetAxisRaw ("Move Vertical");
+				Vector3 horizontal = PlayerRot.localRotation * Vector3.right * _player.GetAxisRaw ("Move Horizontal");
 
 				bool movingForward = false;
 
 				if (vertical != Vector3.zero) {
-					float angle = Vector3.Angle(_front, vertical);
+					float angle = Vector3.Angle(Vector3.forward, vertical);
 					if (angle <= 45) {
 						vertical = vertical * CurrentSpeed;
 						movingForward = true;
 					}
 					else if (angle <= 135) {
-						vertical *= SideSpeed;
+						vertical = vertical * SideSpeed;
 					}
 					else {
 						vertical = Vector3.zero;
@@ -150,13 +148,13 @@ public class CCC : MonoBehaviour
 				}
 
 				if (horizontal != Vector3.zero) {
-					float angle = Vector3.Angle(_front, horizontal);
+					float angle = Vector3.Angle(Vector3.forward, horizontal);
 					if (angle <= 45) {
 						horizontal = horizontal * CurrentSpeed;
 						movingForward = true;
 					}
 					else if (angle <= 135) {
-						horizontal *= SideSpeed;
+						horizontal = horizontal * SideSpeed;
 					}
 					else {
 						horizontal = Vector3.zero;
@@ -171,24 +169,55 @@ public class CCC : MonoBehaviour
 					_speed = vertical + horizontal;
 				}
 				else {
-					_speed = vertical + horizontal + (_front * CurrentSpeed);
+					_speed = vertical + horizontal + (Vector3.forward * CurrentSpeed);
 				}
 
-				_speed = _speed.normalized * CurrentSpeed;
+				velocity2D = _speed.normalized * CurrentSpeed;
 			}
+			//AirControl
 			else {
-				_speed = transform.forward * _player.GetAxisRaw ("Move Vertical") + transform.right * _player.GetAxisRaw ("Move Horizontal");
+				_speed = PlayerRot.localRotation * Vector3.forward * _player.GetAxisRaw ("Move Vertical") +
+					PlayerRot.localRotation * Vector3.right * _player.GetAxisRaw ("Move Horizontal");
 				if (_speed.magnitude > 1) {
 					_speed.Normalize ();
 				}
+				_speed *= AirControlPower * Time.deltaTime * 60;
+
+				Vector3 oldVelocity = velocity2D;
+
+				if (Vector3.Angle (velocity2D, _speed) <= 90) {
+					float _proj = ((velocity2D.x * _speed.x) + (velocity2D.z * _speed.z)) / ((_speed.x * _speed.x) + (_speed.z * _speed.z));
+					_proj *= new Vector2 (_speed.x, _speed.z).magnitude;
+					if (_proj < AirControlLimit) {
+						velocity2D += _speed;
+					}
+				}
+				else {
+					velocity2D += _speed;
+				}
+
+				Vector3 newVelocity = velocity2D;
+
+				if (newVelocity.magnitude >= oldVelocity.magnitude) {
+					newVelocity = newVelocity.normalized * CurrentSpeed;
+				}
+				else {
+					if (newVelocity.magnitude < InitialSpeed) {
+						newVelocity = newVelocity.normalized * InitialSpeed;
+					}
+					else {
+						CurrentSpeed = newVelocity.magnitude;
+					}
+				}
+
+				velocity2D = newVelocity;
 			}
 
 			//JUMP--------------------------------------------------
 			if (_player.GetButton ("Jump") && _canJump)
 			{
-				_body.AddForce(Vector3.up * JumpForce, ForceMode.VelocityChange);
+				velocityGravity = JumpForce;
 				_canJump = false;
-				_jumpCounter = 1;
 			}
 		}
 
@@ -203,6 +232,7 @@ public class CCC : MonoBehaviour
 		//Seulement si le jeu n'est pas en pause
 		if (!_pause) {
 
+			/*
 			//ROTATION-----------------------------
 			var rot = _body.rotation.eulerAngles;
 			//if the rotation of the rigibody and the desired rotation are approximately the same
@@ -216,56 +246,17 @@ public class CCC : MonoBehaviour
 				rot.y = _yRotation;
 				_body.MoveRotation(Quaternion.Euler(rot));
 			}
+			*/
 				
-			//MOUVEMENT-----------------------------
-			Vector3 velocity = _body.velocity;
-			//Deplacement au sol
 			if (CanMove) {
-				if (_isGrounded) {
-					Vector3 velocityChange = (_speed - velocity);
-					velocityChange.y = 0;
-					_body.AddForce(velocityChange, ForceMode.VelocityChange);
-				}
-				//AirControl
-				else {
-					Vector3 oldVelocity = new Vector3(velocity.x, 0, velocity.z);
-
-					_speed *= AirControlPower;
-					if (Vector2.Angle (new Vector2 (velocity.x, velocity.z), new Vector2 (_speed.x, _speed.z)) <= 90) {
-						float _proj = ((velocity.x * _speed.x) + (velocity.z * _speed.z)) / ((_speed.x * _speed.x) + (_speed.z * _speed.z));
-						_proj *= new Vector2 (_speed.x, _speed.z).magnitude;
-						if (_proj < AirControlLimit) {
-							velocity += _speed;
-						}
-					}
-					else {
-						velocity += _speed;
-					}
-
-					Vector3 newVelocity = new Vector3(velocity.x, 0, velocity.z);
-
-					if (newVelocity.magnitude >= oldVelocity.magnitude) {
-						newVelocity = newVelocity.normalized * CurrentSpeed;
-					}
-					else {
-						if (newVelocity.magnitude < InitialSpeed) {
-							newVelocity = newVelocity.normalized * InitialSpeed;
-						}
-						else {
-							CurrentSpeed = newVelocity.magnitude;
-						}
-					}
-
-					newVelocity += new Vector3(0, velocity.y, 0);
-					_body.velocity = newVelocity;
-				}
-			}
-
-			//JUMP & GRAVITY-----------------------------------------------
-			_jumpCounter--;
-
-			if (CanMove) {
-				_body.AddForce(_gravity * Gravity, ForceMode.Acceleration);
+				//MOUVEMENT & JUMP & GRAVITY-----------------------------
+				/*Vector3 newSpeed = Quaternion.Euler (instantRotation) * Vector3.right * velocity2D.x +
+					Quaternion.Euler (instantRotation) * Vector3.up * velocityGravity +
+					Quaternion.Euler (instantRotation) * Vector3.forward * velocity2D.z;*/
+				Vector3 newSpeed = transform.right * velocity2D.x +
+					transform.up * velocityGravity +
+					transform.forward * velocity2D.z;
+				_body.velocity = newSpeed;
 			}
 
 		}
