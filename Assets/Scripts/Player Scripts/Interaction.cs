@@ -18,6 +18,8 @@ public class Interaction : MonoBehaviour {
 	public delegate void Unpausing ();
 	public static event Unpausing OnUnpause;
 
+	[Header("Pour Marie")]
+	[Tooltip("Si True, les yeux resteront fermés.")]
 	public bool EyesClosed = false;
 
 	Player _player;
