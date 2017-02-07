@@ -20,6 +20,9 @@ public class CCC : MonoBehaviour
 	public float Gravity = 19.81f;
 	public float AirControlLimit = 1f;
 	public float AirControlPower = 0.25f;
+	public float DashDuration = 0.25f;
+	public float DashForwardMultiplier = 7f;
+	public float DashSideMultiplier = 7f;
 	public float RotationSpeed = 0.5f;
 	public float GroundCheckRadius = 0.1f;
 	[Range(0f, 90f)]
@@ -34,15 +37,18 @@ public class CCC : MonoBehaviour
 	public Transform GroundCheck;
 	Rigidbody _body;
 
-	Vector3 instantRotation;
-	Vector3 velocity2D = Vector3.zero;
-	float velocityGravity = 0;
+	Vector3 _instantRotation;
+	Vector3 _velocity2D = Vector3.zero;
+	float _velocityGravity = 0;
+	Vector3 _dashVelocity2D = Vector3.zero;
 
 	float _yRotation = 0f;
 	float _xRotation = 0f;
 	Vector3 _speed;
 	public bool _isGrounded = false;
+	public bool _isDashing = false;
 	bool _canJump = true;
+	bool _canDash = true;
 	Vector3 _lastCheckpoint = Vector3.zero;
 
 	bool _pause = false;
@@ -59,7 +65,7 @@ public class CCC : MonoBehaviour
 		_yRotation = _body.rotation.eulerAngles.y;
 
 		CurrentSpeed = InitialSpeed;
-		instantRotation = transform.eulerAngles;
+		_instantRotation = transform.eulerAngles;
 	}
 
 	// Update is called once per frame
@@ -81,10 +87,14 @@ public class CCC : MonoBehaviour
 			if (!_isGrounded) {
 				_isGrounded = Physics.CheckSphere(GroundCheck.position, GroundCheckRadius, Ground);
 				_canJump = false;
-				velocityGravity -= Gravity * Time.deltaTime;
+
 				if (_isGrounded) {
-					velocityGravity = -Gravity * 0.1f;
+					_velocityGravity = -Gravity * 0.1f;
 					_canJump = true;
+					_canDash = true;
+				}
+				else if (!_isDashing) {
+					_velocityGravity -= Gravity * Time.deltaTime;
 				}
 			}
 			else {
@@ -172,10 +182,10 @@ public class CCC : MonoBehaviour
 					_speed = vertical + horizontal + (Vector3.forward * CurrentSpeed);
 				}
 
-				velocity2D = _speed.normalized * CurrentSpeed;
+				_velocity2D = _speed.normalized * CurrentSpeed;
 			}
 			//AirControl
-			else {
+			else if (!_isDashing) {
 				_speed = PlayerRot.localRotation * Vector3.forward * _player.GetAxisRaw ("Move Vertical") +
 					PlayerRot.localRotation * Vector3.right * _player.GetAxisRaw ("Move Horizontal");
 				if (_speed.magnitude > 1) {
@@ -183,20 +193,20 @@ public class CCC : MonoBehaviour
 				}
 				_speed *= AirControlPower * Time.deltaTime * 60;
 
-				Vector3 oldVelocity = velocity2D;
+				Vector3 oldVelocity = _velocity2D;
 
-				if (Vector3.Angle (velocity2D, _speed) <= 90) {
-					float _proj = ((velocity2D.x * _speed.x) + (velocity2D.z * _speed.z)) / ((_speed.x * _speed.x) + (_speed.z * _speed.z));
+				if (Vector3.Angle (_velocity2D, _speed) <= 90) {
+					float _proj = ((_velocity2D.x * _speed.x) + (_velocity2D.z * _speed.z)) / ((_speed.x * _speed.x) + (_speed.z * _speed.z));
 					_proj *= new Vector2 (_speed.x, _speed.z).magnitude;
 					if (_proj < AirControlLimit) {
-						velocity2D += _speed;
+						_velocity2D += _speed;
 					}
 				}
 				else {
-					velocity2D += _speed;
+					_velocity2D += _speed;
 				}
 
-				Vector3 newVelocity = velocity2D;
+				Vector3 newVelocity = _velocity2D;
 
 				if (newVelocity.magnitude >= oldVelocity.magnitude) {
 					newVelocity = newVelocity.normalized * CurrentSpeed;
@@ -210,14 +220,33 @@ public class CCC : MonoBehaviour
 					}
 				}
 
-				velocity2D = newVelocity;
+				_velocity2D = newVelocity;
 			}
 
 			//JUMP--------------------------------------------------
 			if (_player.GetButton ("Jump") && _canJump)
 			{
-				velocityGravity = JumpForce;
+				_velocityGravity = JumpForce;
 				_canJump = false;
+			}
+
+			//DASH--------------------------------------------------
+			if (_player.GetButton ("Dash") && _canDash && !_isGrounded) {
+				_canDash = false;
+				_isDashing = true;
+				_velocityGravity = 0;
+
+				DOVirtual.DelayedCall(DashDuration, () =>
+					{
+						_isDashing = false;
+					});
+
+				if (_player.GetAxisRaw("Move Horizontal") != 0) {
+					_dashVelocity2D = Vector3.right * _player.GetAxisRaw("Move Horizontal") * DashSideMultiplier;
+				}
+				else {
+					_dashVelocity2D = Vector3.forward * DashForwardMultiplier * CurrentSpeed;
+				}
 			}
 		}
 
@@ -232,30 +261,17 @@ public class CCC : MonoBehaviour
 		//Seulement si le jeu n'est pas en pause
 		if (!_pause) {
 
-			/*
-			//ROTATION-----------------------------
-			var rot = _body.rotation.eulerAngles;
-			//if the rotation of the rigibody and the desired rotation are approximately the same
-				//we don't need to update the rigidbody
-				//it can happend in 2 cases :
-				//	-	the player doesn't move the mouse along the X axis
-				//	-	the fixedUpdate has been called twice during the same Update
-				//		so no new input has been process so _yRotation didn't change
-			if (!Mathf.Approximately(rot.y, _yRotation))
-			{
-				rot.y = _yRotation;
-				_body.MoveRotation(Quaternion.Euler(rot));
-			}
-			*/
-				
 			if (CanMove) {
 				//MOUVEMENT & JUMP & GRAVITY-----------------------------
-				/*Vector3 newSpeed = Quaternion.Euler (instantRotation) * Vector3.right * velocity2D.x +
-					Quaternion.Euler (instantRotation) * Vector3.up * velocityGravity +
-					Quaternion.Euler (instantRotation) * Vector3.forward * velocity2D.z;*/
-				Vector3 newSpeed = transform.right * velocity2D.x +
-					transform.up * velocityGravity +
-					transform.forward * velocity2D.z;
+				Vector3 newSpeed = Vector3.zero;
+
+				if (!_isDashing) {
+					newSpeed = transform.right * _velocity2D.x + transform.up * _velocityGravity + transform.forward * _velocity2D.z;
+				}
+				else {
+					newSpeed = transform.right * _dashVelocity2D.x + transform.forward * _dashVelocity2D.z;
+				}
+
 				_body.velocity = newSpeed;
 			}
 
