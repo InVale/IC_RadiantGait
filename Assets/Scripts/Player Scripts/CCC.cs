@@ -16,8 +16,8 @@ public class CCC : MonoBehaviour
 	[Header("Mouvement")]
 	[Tooltip("Vitesse frontal au lancement du jeu. Aussi seuil minimal de vitesse si le joueur freine.")]
 	public float InitialSpeed = 5f;
-	[Tooltip("Accélération par seconde de la vitesse frontale.")]
-	public float AccelerationPerSec = 1f;
+	//[Tooltip("Accélération par seconde de la vitesse frontale.")]
+	//public float AccelerationPerSec = 1f;
 	[Tooltip("Déccélération par seconde de la vitesse frontale lorsque le joueur freine au sol.")]
 	public float BrakeSpeed = 3f;
 	[Tooltip("Vitesse latéral du joueur.")]
@@ -53,6 +53,8 @@ public class CCC : MonoBehaviour
 	[Header("Stuff")]
 	[Tooltip("Durée que met le Player à effectuer une rotation nécessaire pour suivre le chemin (dalle).")]
 	public float RotationSpeed = 0.5f;
+	[Tooltip("De combien de degrée le joueur se penche lorsqu'il prend appuie sur un mur d'accélération.")]
+	public float TiltValue = 5f;
 	[Tooltip("Radius de la sphère qui check si le Player est au sol.")]
 	public float GroundCheckRadius = 0.1f;
 	[Tooltip("Limite de l'angle Y minimale de la caméra lorsque le joueur la contrôle.")]
@@ -64,8 +66,9 @@ public class CCC : MonoBehaviour
 
 	[Header("Prog Stuff")]
 	public LayerMask Ground;
-	public Transform PlayerRot;
-	public Transform Cam;
+	public Transform PlayerTiltZ;
+	public Transform PlayerRotY;
+	public Transform CamRotX;
 	public Transform GroundCheck;
 
 	[Header("Status")]
@@ -75,6 +78,8 @@ public class CCC : MonoBehaviour
 	public bool _isDashing = false;
 	[Tooltip("Le Player est-il en train de Jump (maximum jusqu'à la Durée de Button Press) ?")]
 	public bool _isJumping = false;
+	[Tooltip("Le Player est-il en train de courir à un mur d'accélération ?")]
+	public bool _isWallRunning = false;
 
 	bool _canJump = true;
 	bool _canDash = true;
@@ -93,7 +98,11 @@ public class CCC : MonoBehaviour
 	Vector3 _velocity2D = Vector3.zero;
 	float _velocityGravity = 0;
 	Vector3 _dashVelocity2D = Vector3.zero;
+	float _currentAcceleration = 0;
 
+	float _wallAccelerationJumpDirection = 1;
+
+	float _wallRunningBuffer = 0;
 	float _jumpBuffer = -1;
 	float _jumpTime;
 	float _yRotation = 0f;
@@ -140,7 +149,7 @@ public class CCC : MonoBehaviour
 					_canJump = true;
 					_canDash = true;
 				}
-				else if (!_isDashing) {
+				else if (!_isDashing && !_isWallRunning) {
 					_velocityGravity -= Gravity * Time.deltaTime;
 				}
 			}
@@ -162,27 +171,31 @@ public class CCC : MonoBehaviour
 				//because physics functions have to be called in FixedUpdate
 				//but inputs have to be processed in Update
 				_yRotation += rotx * Mathf.Rad2Deg * Time.deltaTime;
-				Vector3 rot = PlayerRot.localEulerAngles;
+				Vector3 rot = PlayerRotY.localEulerAngles;
 				rot.y = _yRotation;
-				PlayerRot.localEulerAngles = rot;
+				PlayerRotY.localEulerAngles = rot;
 
 				//since we don't use the rigidbody to rotate the camera along the local X axis
 				//we can directly modify the transform
 				//note also that the camera has no collider attached to it that could interfere with the rigidbody
 				_xRotation += roty * Time.deltaTime * Mathf.Rad2Deg;
 				_xRotation = Mathf.Clamp(_xRotation, -TopAngleLimit, BottomAngleLimit);
-				rot = Cam.localEulerAngles;
+				rot = CamRotX.localEulerAngles;
 				rot.x = _xRotation;
-				Cam.localEulerAngles = rot;
+				CamRotX.localEulerAngles = rot;
 			}
 
 			//MOVEMENT-----------------------------------------------
-			CurrentSpeed += AccelerationPerSec * Time.deltaTime;
+			CurrentSpeed += _velocity2D.z * Time.deltaTime * _currentAcceleration;
 
-			if (_isGrounded) {
+			//CurrentSpeed += AccelerationPerSec * Time.deltaTime;
+			if (_isWallRunning) {
+				_velocity2D = Vector3.forward * CurrentSpeed;
+			}
+			else if (_isGrounded) {
 
-				Vector3 vertical = PlayerRot.localRotation * Vector3.forward * _player.GetAxisRaw ("Move Vertical");
-				Vector3 horizontal = PlayerRot.localRotation * Vector3.right * _player.GetAxisRaw ("Move Horizontal");
+				Vector3 vertical = PlayerRotY.localRotation * Vector3.forward * _player.GetAxisRaw ("Move Vertical");
+				Vector3 horizontal = PlayerRotY.localRotation * Vector3.right * _player.GetAxisRaw ("Move Horizontal");
 
 				bool movingForward = false;
 
@@ -233,8 +246,8 @@ public class CCC : MonoBehaviour
 			}
 			//AirControl
 			else if (!_isDashing) {
-				_speed = PlayerRot.localRotation * Vector3.forward * _player.GetAxisRaw ("Move Vertical") +
-					PlayerRot.localRotation * Vector3.right * _player.GetAxisRaw ("Move Horizontal");
+				_speed = PlayerRotY.localRotation * Vector3.forward * _player.GetAxisRaw ("Move Vertical") +
+					PlayerRotY.localRotation * Vector3.right * _player.GetAxisRaw ("Move Horizontal");
 				if (_speed.magnitude > 1) {
 					_speed.Normalize ();
 				}
@@ -271,7 +284,25 @@ public class CCC : MonoBehaviour
 			}
 
 			//JUMP--------------------------------------------------
-			if (_player.GetButtonDown ("Jump") && !_isJumping) {
+			if (_wallRunningBuffer > 0) {
+				_wallRunningBuffer -= Time.deltaTime;
+			}
+
+			if (_isWallRunning) {
+				
+				if (_player.GetButtonDown("Jump")) {
+					Vector3 _newSpeed = (Vector3.right * 3 * _wallAccelerationJumpDirection) + (Vector3.forward * CurrentSpeed);
+					_velocity2D = _newSpeed.normalized * CurrentSpeed;
+					_jumpBuffer = -1;
+					_velocityGravity = JumpMinimumForce;
+					_wallRunningBuffer = 0.5f;
+					_isWallRunning = false;
+
+					PlayerTiltZ.DOKill ();
+					PlayerTiltZ.DORotate (new Vector3(0, 0, 0), RotationSpeed);
+				}
+			}
+			else if (_player.GetButtonDown ("Jump") && !_isJumping) {
 					
 				if (_canJump) {
 					_jumpBuffer = -1;
@@ -313,7 +344,7 @@ public class CCC : MonoBehaviour
 			}
 
 			//DASH--------------------------------------------------
-			if (_player.GetButton ("Dash") && _canDash && !_isGrounded) {
+			if (_player.GetButton ("Dash") && _canDash && !_isGrounded && !_isWallRunning) {
 				_canDash = false;
 				_isDashing = true;
 				_velocityGravity = 0;
@@ -395,17 +426,80 @@ public class CCC : MonoBehaviour
 				}
 			}
 		}
+
+		RaycastHit hit;
+		if (Physics.Raycast(transform.position, -transform.up, out hit, 2)) {
+			if (hit.collider.GetComponent<Accelerator>() != null) {
+				_currentAcceleration = hit.collider.GetComponent<Accelerator>().AcceleratingValue / 10;
+			}
+		}
+		else if (!_isWallRunning && (_wallRunningBuffer <= 0)) {
+			if (Physics.Raycast(transform.position, -transform.right, out hit, 1)) {
+				if (!_isGrounded) {
+					if (hit.collider.GetComponent<Accelerator>() != null) {
+						_currentAcceleration = hit.collider.GetComponent<Accelerator>().AcceleratingValue / 10;
+
+						_isWallRunning = true;
+						_velocityGravity = 0;
+						_wallAccelerationJumpDirection = 1;
+
+						PlayerTiltZ.DOKill ();
+						PlayerTiltZ.DORotate (new Vector3(0, 0, -TiltValue), RotationSpeed);
+					}
+				}
+			}
+			if (Physics.Raycast(transform.position, transform.right, out hit, 1)) {
+				if (!_isGrounded) {
+					if (hit.collider.GetComponent<Accelerator>() != null) {
+						_currentAcceleration = hit.collider.GetComponent<Accelerator>().AcceleratingValue / 10;
+
+						_isWallRunning = true;
+						_velocityGravity = 0;
+						_wallAccelerationJumpDirection = -1;
+
+						PlayerTiltZ.DOKill ();
+						PlayerTiltZ.DORotate (new Vector3(0, 0, TiltValue), RotationSpeed);
+					}
+				}
+			}
+		}
 	}
 
 	void OnCollisionExit (Collision collision) {
 		if (collision.collider.tag == "Platform") {
 			transform.parent = null;
 		}
+
+		if (collision.collider.GetComponent<Accelerator>() != null) {
+			_currentAcceleration = 0;
+
+			if (_isWallRunning) {
+				_isWallRunning = false;
+
+				PlayerTiltZ.DOKill ();
+				PlayerTiltZ.DORotate (new Vector3(0, 0, 0), RotationSpeed);
+			}
+		}
 	}
 
 	void OnTriggerEnter (Collider collider) {
 		if (collider.tag == "Checkpoint") {
 			_lastCheckpoint = collider.transform.position;
+		}
+
+		if (collider.GetComponent<Deccelerator>() != null) {
+			if (!_isDashing) {
+				if (collider.GetComponent<Deccelerator>().Behaviour == DecceleratingBehaviour.Brute) {
+					CurrentSpeed -= collider.GetComponent<Deccelerator>().DecceleratingValue;
+				}
+				else {
+					CurrentSpeed -= (collider.GetComponent<Deccelerator>().DecceleratingValue / 100) * CurrentSpeed;
+				}
+
+				if (CurrentSpeed < InitialSpeed) {
+					CurrentSpeed = InitialSpeed;
+				}
+			}
 		}
 	}
 
